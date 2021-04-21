@@ -16,38 +16,71 @@ import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.drawable.BitmapDrawable;
 import android.net.Uri;
+import android.nfc.Tag;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.provider.MediaStore;
+import android.util.Log;
 import android.util.SparseArray;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.View;
+import android.view.textclassifier.TextLanguage;
+import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageView;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import com.google.android.gms.dynamic.IFragmentWrapper;
+import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.gms.vision.Frame;
 import com.google.android.gms.vision.text.TextBlock;
 import com.google.android.gms.vision.text.TextRecognizer;
+import com.google.firebase.ml.common.modeldownload.FirebaseModelDownloadConditions;
+import com.google.firebase.ml.naturallanguage.FirebaseNaturalLanguage;
+import com.google.firebase.ml.naturallanguage.languageid.FirebaseLanguageIdentification;
+import com.google.firebase.ml.naturallanguage.translate.FirebaseTranslateLanguage;
+import com.google.firebase.ml.naturallanguage.translate.FirebaseTranslator;
+import com.google.firebase.ml.naturallanguage.translate.FirebaseTranslatorOptions;
+import com.itextpdf.text.Document;
+import com.itextpdf.text.Paragraph;
+import com.itextpdf.text.pdf.PdfWriter;
 import com.theartofdev.edmodo.cropper.CropImage;
 import com.theartofdev.edmodo.cropper.CropImageView;
 
 import org.w3c.dom.Text;
 
+import java.io.FileOutputStream;
+import java.text.SimpleDateFormat;
+import java.util.Locale;
+
 public class MainActivity extends AppCompatActivity {
+
+
 
     EditText mResultEt;
     ImageView mPreviewIv;
+    TextView msourceLang;
+    Button mtranslatebtn;
+    TextView mtranslatedtext;
+
+    private String sourceText;
 
     private static final int CAMERA_REQUEST_CODE = 200;
     private static final int STORAGE_REQUEST_CODE = 400;
     private static final int IMAGE_PICK_GALLERY_CODE = 1000;
     private static final int IMAGE_PICK_CAMERA_CODE = 1001;
 
+
     String cameraPermission[];
     String storagePermission[];
 
     Uri image_uri;
+    private int requestCode;
+    private String[] permissions;
+    private int[] grantResults;
 
 
     @Override
@@ -59,11 +92,90 @@ public class MainActivity extends AppCompatActivity {
 
         mResultEt = findViewById(R.id.resultEt);
         mPreviewIv = findViewById(R.id.imageIv);
+        msourceLang = findViewById(R.id.sourceLang);
+        mtranslatebtn = findViewById(R.id.translate);
+        mtranslatedtext = findViewById(R.id.translatedtext);
+
+
 
         cameraPermission = new String[]{Manifest.permission.CAMERA, Manifest.permission.WRITE_EXTERNAL_STORAGE};
 
         storagePermission = new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE};
+        permissions = new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE};
 
+
+        mtranslatebtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                identifyLanguage();
+            }
+        });
+
+
+    }
+
+
+
+
+    private void identifyLanguage() {
+        sourceText = mResultEt.getText().toString();
+
+        FirebaseLanguageIdentification identifier = FirebaseNaturalLanguage.getInstance()
+                .getLanguageIdentification();
+        msourceLang.setText("Detecting...");
+
+        identifier.identifyLanguage(sourceText).addOnSuccessListener(new OnSuccessListener<String>() {
+            @Override
+            public void onSuccess(String s) {
+                if (s.equals("und")){
+                    Toast.makeText(getApplicationContext(),"Language not identified",Toast.LENGTH_SHORT).show();
+
+                }
+                else{
+                    getLanguageCode(s);
+                }
+            }
+        });
+
+
+    }
+
+    private void getLanguageCode(String language) {
+        int langcode;
+        switch (language){
+            case "en":
+                langcode = FirebaseTranslateLanguage.EN;
+                msourceLang.setText("English");
+                break;
+            default:
+                langcode = 0;
+        }
+        translateText(langcode);
+    }
+
+    private void translateText(int langcode) {
+        mtranslatedtext.setText("Translating...");
+        FirebaseTranslatorOptions options = new FirebaseTranslatorOptions.Builder()
+                .setSourceLanguage(langcode)
+                .setTargetLanguage(FirebaseTranslateLanguage.HI)
+                .build();
+        final FirebaseTranslator translator = FirebaseNaturalLanguage.getInstance()
+                .getTranslator(options);
+        FirebaseModelDownloadConditions conditions = new FirebaseModelDownloadConditions.Builder()
+                .build();
+
+
+        translator.downloadModelIfNeeded(conditions).addOnSuccessListener(new OnSuccessListener<Void>() {
+            @Override
+            public void onSuccess(Void aVoid) {
+                translator.translate(sourceText).addOnSuccessListener(new OnSuccessListener<String>() {
+                    @Override
+                    public void onSuccess(String s) {
+                        mtranslatedtext.setText(s);
+                    }
+                });
+            }
+        });
     }
 
 
@@ -113,6 +225,8 @@ public class MainActivity extends AppCompatActivity {
         dialog.create().show();
     }
 
+
+
     private void pickGallery() {
         Intent intent = new Intent(Intent.ACTION_PICK);
         intent.setType("image/*");
@@ -151,6 +265,7 @@ public class MainActivity extends AppCompatActivity {
         return result && result1;
     }
 
+
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         switch (requestCode) {
@@ -179,6 +294,9 @@ public class MainActivity extends AppCompatActivity {
                 }
                 break;
 
+           
+
+            
 
         }
     }
